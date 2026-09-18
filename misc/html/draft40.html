@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hacktronics 2026 · EOC Hazard Analysis</title>
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Montserrat', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        tactical: {
+                            900: '#0a0f18',
+                            800: '#111827',
+                            700: '#1f2937',
+                            cyan: '#06b6d4',
+                            amber: '#f59e0b',
+                            red: '#ef4444',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { 
+            background-color: #050505; 
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+
+        #particles-js {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1;
+            background: #020408;
+        }
+
+        /* Tactical Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0a0f18; }
+        ::-webkit-scrollbar-thumb { background: #1f2937; }
+        ::-webkit-scrollbar-thumb:hover { background: #06b6d4; }
+
+        /* Authoritative UI Elements */
+        .panel { 
+            background: rgba(10, 15, 24, 0.85); 
+            backdrop-filter: blur(12px);
+            border: 1px solid #1f2937; 
+            border-radius: 2px;
+        }
+        .panel-header {
+            background: #111827;
+            border-bottom: 1px solid #1f2937;
+            padding: 10px 16px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .panel-content { padding: 16px; }
+
+        /* Form Controls */
+        label { 
+            font-size: 0.65rem; 
+            text-transform: uppercase; 
+            letter-spacing: 0.05em; 
+            color: #9ca3af; 
+            font-weight: 600;
+            margin-bottom: 4px;
+            display: block;
+        }
+        input[type="number"], input[type="text"] { 
+            background: #020408; 
+            border: 1px solid #374151; 
+            color: #f8fafc; 
+            padding: 8px; 
+            font-family: 'JetBrains Mono', monospace; 
+            font-size: 0.85rem; 
+            width: 100%;
+            border-radius: 2px;
+            transition: all 0.2s;
+        }
+        input[type="number"]:focus { outline: none; border-color: #06b6d4; background: #0a0f18; }
+        
+        /* Stark Range Sliders */
+        input[type="range"] { 
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 14px; width: 8px;
+            border-radius: 0;
+            background: #06b6d4;
+            cursor: pointer;
+            margin-top: -5px;
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px;
+            cursor: pointer;
+            background: #374151;
+            border-radius: 0;
+        }
+
+        /* Segmented / Action Buttons */
+        .btn-action { 
+            background: #111827; 
+            border: 1px solid #374151; 
+            color: #9ca3af; 
+            padding: 8px 12px; 
+            font-size: 0.75rem; 
+            font-family: 'JetBrains Mono', monospace;
+            text-transform: uppercase;
+            cursor: pointer; 
+            transition: all 0.15s;
+            border-radius: 2px;
+        }
+        .btn-action:hover { border-color: #06b6d4; color: #e2e8f0; }
+        .btn-action.active { background: rgba(6, 182, 212, 0.1); border-color: #06b6d4; color: #06b6d4; }
+
+        /* Map Container */
+        #map { 
+            height: 600px; 
+            width: 100%; 
+            background: #020408;
+            border: 1px solid #1f2937;
+            border-radius: 2px;
+            z-index: 1;
+        }
+
+        /* Telemetry Cards */
+        .telemetry-card {
+            background: rgba(10, 15, 24, 0.9);
+            border: 1px solid #1f2937;
+            border-left: 3px solid #374151;
+            padding: 12px;
+            border-radius: 2px;
+        }
+        .telemetry-card.red { border-left-color: #ef4444; background: rgba(239, 68, 68, 0.05); }
+        .telemetry-card.orange { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.05); }
+        .telemetry-card.yellow { border-left-color: #eab308; background: rgba(234, 179, 8, 0.05); }
+        
+        .tel-val { font-family: 'JetBrains Mono', monospace; font-size: 1.25rem; font-weight: 700; color: #f8fafc; }
+        .tel-lbl { font-size: 0.65rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+
+        .time-readout { font-size: 1.5rem; font-weight: 800; color: #06b6d4; text-align: center; margin: 12px 0; }
+    </style>
+</head>
+<body class="antialiased">
+
+<div id="particles-js"></div>
+
+<div class="max-w-[1600px] mx-auto p-4 relative z-10">
+    
+    <!-- TOP COMMAND BAR -->
+    <header class="panel mb-4 flex justify-between items-center p-4 border-b border-tactical-cyan/30">
+        <div class="flex items-center gap-4">
+            <div class="font-extrabold text-xl tracking-tight text-white uppercase">
+                HACKTRONICS <span class="text-tactical-cyan">2026</span>
+            </div>
+            <div class="h-4 w-px bg-slate-700"></div>
+            <div class="font-mono text-xs text-slate-400 bg-slate-800 px-2 py-1 border border-slate-700 rounded-sm">
+                CIVIL DEFENSE EOC
+            </div>
+        </div>
+        
+        <!-- Live UTC Clock -->
+        <div class="font-mono text-lg font-bold text-slate-200 flex items-center gap-3">
+            <i class="fa-solid fa-satellite-dish text-tactical-cyan animate-pulse text-sm"></i>
+            <span id="utc-clock">0000-00-00 00:00:00 UTC</span>
+        </div>
+
+        <div class="flex gap-3">
+            <div class="font-mono text-xs text-emerald-400 bg-emerald-400/10 border border-emerald-500/30 px-3 py-1.5 flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div> SYSTEM NOMINAL
+            </div>
+        </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        
+        <!-- LEFT SIDEBAR: CONTROLS -->
+        <div class="flex flex-col gap-4">
+            
+            <!-- ENGINE MODULE -->
+            <div class="panel border-t-2 border-t-tactical-cyan">
+                <div class="panel-header">
+                    <span><i class="fa-solid fa-microchip mr-2 text-tactical-cyan"></i> Hazard Propagation Engine</span>
+                </div>
+                <div class="panel-content">
+                    <div class="grid grid-cols-2 gap-2 mb-4">
+                        <button class="btn-action active" id="mode-FIRE" onclick="setSimMode('FIRE')">Pool Burn</button>
+                        <button class="btn-action" id="mode-BLEVE" onclick="setSimMode('BLEVE')">BLEVE Blast</button>
+                    </div>
+
+                    <div class="time-readout font-mono" id="time-display">00:00 min</div>
+                    
+                    <input type="range" id="time-slider" min="0" max="100" step="0.1" value="0" oninput="scrubTime(this.value)" class="mb-4">
+                    
+                    <div class="flex justify-center gap-2">
+                        <button class="btn-action !px-3" onclick="stepSim(-1)"><i class="fa-solid fa-backward-step"></i></button>
+                        <button class="btn-action !px-5" id="btn-play" onclick="togglePlay()"><i class="fa-solid fa-play"></i></button>
+                        <button class="btn-action !px-3" onclick="resetSim()"><i class="fa-solid fa-rotate-left"></i></button>
+                        <button class="btn-action !px-3" onclick="stepSim(1)"><i class="fa-solid fa-forward-step"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- INVENTORY CONFIG -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span><i class="fa-solid fa-database mr-2 text-tactical-cyan"></i> Incident Parameters</span>
+                </div>
+                <div class="panel-content">
+                    <label>Combustible Material</label>
+                    <div class="grid grid-cols-2 gap-2 mb-4">
+                        <button class="btn-action active" id="btn-Gasoline" onclick="setSubstance('Gasoline')">Gasoline</button>
+                        <button class="btn-action" id="btn-Diesel" onclick="setSubstance('Diesel')">Diesel</button>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3 mb-4">
+                        <div>
+                            <label>Latitude</label>
+                            <input type="number" id="lat" value="12.8406" step="0.0001" onchange="initSimulation()">
+                        </div>
+                        <div>
+                            <label>Longitude</label>
+                            <input type="number" id="lon" value="80.1534" step="0.0001" onchange="initSimulation()">
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between items-end mb-1">
+                        <label class="!mb-0">Inventory Vol (m³)</label>
+                        <span id="vol-val" class="font-mono text-xs text-tactical-cyan font-bold">120</span>
+                    </div>
+                    <input type="range" id="volume" min="20" max="500" step="10" value="120" oninput="initSimulation()">
+
+                    <div class="mt-5 bg-tactical-800 border border-slate-700 p-3 flex justify-between items-center rounded-sm">
+                        <span class="text-[0.65rem] text-slate-400 uppercase font-bold tracking-widest">Live Output</span>
+                        <span class="font-mono text-tactical-cyan font-bold" id="dynamic-metric">0.0 kg/s</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- METEOROLOGY -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span><i class="fa-solid fa-wind mr-2 text-tactical-cyan"></i> Meteorological Telemetry</span>
+                </div>
+                <div class="panel-content">
+                    <button class="btn-action w-full mb-5 !border-tactical-cyan/50 hover:bg-tactical-cyan/10" onclick="fetchLiveWind()">
+                        <i class="fa-solid fa-cloud-bolt mr-2"></i> Sync Open-Meteo
+                    </button>
+                    
+                    <div class="flex justify-between items-end mb-1">
+                        <label class="!mb-0">True Wind (m/s)</label>
+                        <span id="ws-val" class="font-mono text-xs text-tactical-cyan font-bold">2.5</span>
+                    </div>
+                    <input type="range" id="wind_speed" min="0.0" max="15.0" step="0.5" value="2.5" oninput="initSimulation()" class="mb-4">
+
+                    <div class="flex justify-between items-end mb-1">
+                        <label class="!mb-0">Wind Vector (°)</label>
+                        <span id="wd-val" class="font-mono text-xs text-tactical-cyan font-bold">90</span>
+                    </div>
+                    <input type="range" id="wind_dir" min="0" max="360" step="5" value="90" oninput="initSimulation()">
+                </div>
+            </div>
+
+        </div>
+
+        <!-- RIGHT MAIN AREA: MAP & TELEMETRY -->
+        <div class="lg:col-span-3 flex flex-col gap-4">
+            
+            <div class="relative">
+                <div id="map"></div>
+                <!-- Tactical Crosshair Overlay -->
+                <div class="absolute inset-0 pointer-events-none flex items-center justify-center opacity-30 z-[2]">
+                    <div class="w-[1px] h-[100%] bg-tactical-cyan absolute"></div>
+                    <div class="w-[100%] h-[1px] bg-tactical-cyan absolute"></div>
+                    <div class="w-16 h-16 border-2 border-tactical-cyan rounded-full absolute"></div>
+                </div>
+            </div>
+            
+            <!-- TELEMETRY HUD -->
+            <div class="panel border-t-2 border-t-slate-600">
+                <div class="panel-header bg-transparent border-none pb-0">
+                    <span><i class="fa-solid fa-wave-square mr-2 text-slate-400"></i> Zone Thresholds</span>
+                </div>
+                <div class="panel-content grid grid-cols-2 md:grid-cols-6 gap-3 pt-2" id="stat-grid">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+<script>
+    // System Clock
+    function updateUTCClock() {
+        const now = new Date();
+        document.getElementById('utc-clock').innerText = now.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+    }
+    setInterval(updateUTCClock, 1000);
+    updateUTCClock();
+
+    // Subtle Tactical Grid Background
+    particlesJS("particles-js", {
+      "particles": {
+        "number": { "value": 150 },
+        "color": { "value": "#1e293b" },
+        "shape": { "type": "circle" },
+        "opacity": { "value": 0.5 },
+        "size": { "value": 1.5 },
+        "line_linked": { "enable": false },
+        "move": { "enable": true, "speed": 0.3, "direction": "none", "out_mode": "out" }
+      },
+      "interactivity": { "events": { "onhover": { "enable": false }, "onclick": { "enable": false } } },
+      "retina_detect": true
+    });
+
+    const THERMAL_BANDS = {"Red": 12.5, "Orange": 4.0, "Yellow": 1.4};
+    const BLAST_BANDS = {"Red": 35, "Orange": 15, "Yellow": 3}; 
+    const BAND_HEX = {"Red": "#ef4444", "Orange": "#f59e0b", "Yellow": "#eab308"};
+
+    const SUBSTANCES = {
+        "Gasoline": { density: 740, m_flux: 0.06, dH_c: 4.5e7, eta_rad: 0.30, eta_exp: 0.06 },
+        "Diesel": { density: 800, m_flux: 0.030, dH_c: 4.20e7, eta_rad: 0.15, eta_exp: 0.01 }
+    };
+    
+    let currentSubstance = "Gasoline";
+    
+    // Engine State
+    let simMode = 'FIRE'; 
+    let simTime = 0;      
+    let simDuration = 600; 
+    let isPlaying = false;
+    let lastRealTime = 0;
+    let animRequest = null;
+    let baseMass = 0, baseArea = 0, maxBurnTime = 0, tntEquivalent = 0;
+
+    // Map Setup (Removed zoom control for cleaner HUD)
+    let map = L.map('map', { zoomControl: false, attributionControl: false }).setView([12.8406, 80.1534], 17); 
+
+    L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains: ['mt0','mt1','mt2','mt3']
+    }).addTo(map);
+
+    let hazardLayer = L.layerGroup().addTo(map);
+
+    // Math Functions
+    function getDestinationPoint(lat, lon, distanceMeters, bearingDeg) {
+        const R = 6371000, rad = Math.PI / 180;
+        const lat1 = lat * rad, lon1 = lon * rad, brng = bearingDeg * rad;
+        const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distanceMeters / R) + Math.cos(lat1) * Math.sin(distanceMeters / R) * Math.cos(brng));
+        const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(distanceMeters / R) * Math.cos(lat1), Math.cos(distanceMeters / R) - Math.sin(lat1) * Math.sin(lat2));
+        return [lat2 / rad, lon2 / rad];
+    }
+
+    function thermalRadius(I_threshold_kw, Q_rad_w, tau = 0.8) {
+        let I_threshold_w = I_threshold_kw * 1000;
+        let r = Math.sqrt((Q_rad_w * tau) / (4 * Math.PI * I_threshold_w));
+        return isNaN(r) ? 0 : r;
+    }
+
+    function overpressure_kpa(R, W_TNT) {
+        if (R <= 0 || W_TNT <= 0) return 0;
+        let Z = R / Math.cbrt(W_TNT);
+        return 1772 / Z - 114 / Math.pow(Z, 2) + 108 / Math.pow(Z, 3);
+    }
+
+    function blastRadius(P_threshold_kpa, W_TNT) {
+        if (W_TNT <= 0) return 0;
+        let f = (R) => overpressure_kpa(R, W_TNT) - P_threshold_kpa;
+        let low = 0.1, high = 20000.0;
+        if (f(low) < 0) return 0.0;
+        if (f(high) > 0) return 20000.0;
+        for (let i = 0; i < 60; i++) {
+            let mid = (low + high) / 2;
+            let val = f(mid);
+            if (Math.abs(val) < 1e-4) return mid;
+            if (val > 0) low = mid; else high = mid;
+        }
+        return (low + high) / 2;
+    }
+
+    function windSkewPolygon(lat, lon, base_radius_m, wind_dir_deg, k_down = 1.8, k_up = 0.6) {
+        if (base_radius_m <= 0) return [];
+        let points = [];
+        for (let theta = 0; theta < 360; theta += 10) {
+            let delta_deg = (theta - wind_dir_deg + 180) % 360 - 180; 
+            let delta = delta_deg * (Math.PI / 180);
+            let stretch = Math.abs(delta_deg) < 90 
+                ? 1 + (k_down - 1) * Math.pow(Math.cos(delta), 2)
+                : 1 - (1 - k_up) * Math.pow(Math.cos(delta), 2);
+            points.push(getDestinationPoint(lat, lon, base_radius_m * stretch, theta));
+        }
+        return points;
+    }
+
+    // UI Logic
+    function setSubstance(name) {
+        currentSubstance = name;
+        document.getElementById('btn-Gasoline').classList.remove('active');
+        document.getElementById('btn-Diesel').classList.remove('active');
+        document.getElementById(`btn-${name}`).classList.add('active');
+        initSimulation();
+    }
+
+    function setSimMode(mode) {
+        simMode = mode;
+        document.getElementById('mode-FIRE').classList.toggle('active', mode === 'FIRE');
+        document.getElementById('mode-BLEVE').classList.toggle('active', mode === 'BLEVE');
+        initSimulation();
+    }
+
+    function togglePlay() {
+        if (isPlaying) pauseSim();
+        else playSim();
+    }
+
+    function playSim() {
+        if (simTime >= simDuration) simTime = 0;
+        isPlaying = true;
+        document.getElementById('btn-play').innerHTML = '<i class="fa-solid fa-pause"></i>';
+        lastRealTime = performance.now();
+        animRequest = requestAnimationFrame(gameLoop);
+    }
+
+    function pauseSim() {
+        isPlaying = false;
+        document.getElementById('btn-play').innerHTML = '<i class="fa-solid fa-play"></i>';
+        if (animRequest) cancelAnimationFrame(animRequest);
+    }
+
+    function resetSim() { pauseSim(); simTime = 0; updateView(); }
+    
+    function stepSim(dir) {
+        pauseSim();
+        let step = simMode === 'FIRE' ? (simDuration / 100) : (simDuration / 100);
+        simTime = Math.max(0, Math.min(simDuration, simTime + dir * step));
+        updateView();
+    }
+
+    function scrubTime(val) { pauseSim(); simTime = parseFloat(val); updateView(); }
+
+    function initSimulation() {
+        pauseSim();
+        let volume = parseFloat(document.getElementById('volume').value);
+        let mat = SUBSTANCES[currentSubstance];
+
+        baseMass = volume * mat.density;
+        let radius_guess = Math.pow(volume / (Math.PI * 8), 1/3);
+        baseArea = Math.PI * Math.pow(radius_guess, 2);
+        
+        let maxCombustionRate = mat.m_flux * baseArea;
+        maxBurnTime = baseMass / maxCombustionRate;
+        tntEquivalent = (mat.eta_exp * baseMass * mat.dH_c) / 4.184e6;
+
+        simDuration = simMode === 'FIRE' ? maxBurnTime : 2.5; 
+        document.getElementById('time-slider').max = simDuration;
+        document.getElementById('time-slider').step = simDuration / 200;
+        simTime = 0;
+        
+        document.getElementById('vol-val').innerText = volume;
+        document.getElementById('ws-val').innerText = parseFloat(document.getElementById('wind_speed').value).toFixed(1);
+        document.getElementById('wd-val').innerText = document.getElementById('wind_dir').value;
+
+        updateView();
+        map.panTo([parseFloat(document.getElementById('lat').value), parseFloat(document.getElementById('lon').value)]);
+    }
+
+    function gameLoop(time) {
+        if (!isPlaying) return;
+        let dtReal = (time - lastRealTime) / 1000.0;
+        lastRealTime = time;
+        simTime += dtReal * (simMode === 'FIRE' ? 60.0 : 0.5);
+
+        if (simTime >= simDuration) {
+            simTime = simDuration; updateView(); pauseSim(); return;
+        }
+        updateView();
+        animRequest = requestAnimationFrame(gameLoop);
+    }
+
+    function updateView() {
+        let lat = parseFloat(document.getElementById('lat').value);
+        let lon = parseFloat(document.getElementById('lon').value);
+        let wind_dir_deg = parseFloat(document.getElementById('wind_dir').value);
+        let mat = SUBSTANCES[currentSubstance];
+
+        hazardLayer.clearLayers();
+        document.getElementById('time-slider').value = simTime;
+        
+        if (simMode === 'FIRE') {
+            let mins = Math.floor(simTime / 60);
+            let secs = Math.floor(simTime % 60).toString().padStart(2, '0');
+            document.getElementById('time-display').innerText = `T+ ${mins}:${secs} M`;
+        } else {
+            document.getElementById('time-display').innerText = `T+ ${(simTime * 1000).toFixed(0)} MS`;
+        }
+
+        // Tactical Marker
+        let icon = L.divIcon({ 
+            className: 'custom-icon', 
+            html: '<div style="background:#0a0f18; width:16px; height:16px; border:2px solid #ef4444; transform:rotate(45deg);"></div>', 
+            iconSize: [16, 16], iconAnchor: [8, 8] 
+        });
+        L.marker([lat, lon], {icon: icon}).addTo(hazardLayer);
+
+        let cardsHtml = '';
+
+        if (simMode === 'FIRE') {
+            let fractionRemaining = Math.max(0, 1 - (simTime / maxBurnTime));
+            let currentArea = baseArea * Math.pow(fractionRemaining, 2/3);
+            let combustion_rate = currentArea > 0 ? mat.m_flux * currentArea : 0;
+            let Q_rad_transient = mat.eta_rad * combustion_rate * mat.dH_c;
+
+            document.getElementById('dynamic-metric').innerText = `HRR: ${(Q_rad_transient / 1e6).toFixed(1)} MW`;
+
+            for (let [b, threshold] of Object.entries(THERMAL_BANDS)) {
+                let r = thermalRadius(threshold, Q_rad_transient);
+                if (r > 0) {
+                    let poly = windSkewPolygon(lat, lon, r, wind_dir_deg);
+                    L.polygon(poly, { color: BAND_HEX[b], fillColor: BAND_HEX[b], fillOpacity: 0.2, weight: 1.5, dashArray: '4,4' }).addTo(hazardLayer);
+                }
+                cardsHtml += `<div class="telemetry-card ${b.toLowerCase()}"><div class="text-xs text-[${BAND_HEX[b]}] font-bold uppercase mb-1">Thermal · ${b}</div><div class="tel-val">${r.toFixed(1)}m</div><div class="tel-lbl">${threshold} kW/m²</div></div>`;
+            }
+
+            // Wind Vector Line
+            let downwind_pt = getDestinationPoint(lat, lon, 100, wind_dir_deg);
+            L.polyline([[lat, lon], downwind_pt], { color: '#06b6d4', weight: 1.5, dashArray: '2,6', opacity: 0.8 }).addTo(hazardLayer);
+
+        } else {
+            let soundSpeed = 343; 
+            let waveRadius = soundSpeed * simTime; 
+            let currentOverpressure = overpressure_kpa(waveRadius, tntEquivalent);
+            
+            document.getElementById('dynamic-metric').innerText = `OVP: ${currentOverpressure.toFixed(1)} kPa`;
+
+            if (waveRadius > 0 && currentOverpressure > 0.5) {
+                L.circle([lat, lon], { radius: waveRadius, color: '#f8fafc', weight: 2, fillOpacity: 0.05, dashArray: '2, 4' }).addTo(hazardLayer);
+            }
+
+            let decayOpacity = Math.max(0.15, 1 - (simTime / simDuration));
+            for (let [b, threshold] of Object.entries(BLAST_BANDS)) {
+                let r = blastRadius(threshold, tntEquivalent);
+                if (r > 0) {
+                    let polyOpac = waveRadius > r ? (decayOpacity * 0.3) : 0.8;
+                    L.circle([lat, lon], { radius: r, color: BAND_HEX[b], fill: false, weight: 1.5, opacity: polyOpac }).addTo(hazardLayer);
+                }
+                cardsHtml += `<div class="telemetry-card ${b.toLowerCase()}"><div class="text-xs text-[${BAND_HEX[b]}] font-bold uppercase mb-1">Blast · ${b}</div><div class="tel-val">${r.toFixed(1)}m</div><div class="tel-lbl">${threshold} kPa</div></div>`;
+            }
+        }
+        document.getElementById('stat-grid').innerHTML = cardsHtml;
+    }
+
+    async function fetchLiveWind() {
+        let lat = document.getElementById('lat').value;
+        let lon = document.getElementById('lon').value;
+        try {
+            const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
+            const data = await res.json();
+            document.getElementById('wind_speed').value = (data.current_weather.windspeed / 3.6).toFixed(1);
+            document.getElementById('wind_dir').value = data.current_weather.winddirection;
+            initSimulation();
+        } catch(e) {
+            console.error("External weather API unavailable.");
+        }
+    }
+
+    // Startup
+    initSimulation();
+    setTimeout(() => { map.invalidateSize(); }, 200);
+</script>
+</body>
+</html>

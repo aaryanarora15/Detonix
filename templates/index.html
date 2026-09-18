@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detonix · Operations Center &amp; Weather Fusion</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg: #0B0F19; --surface: #111827; --surface-card: #1F2937;
+            --border: #374151; --text: #F9FAFB; --muted: #9CA3AF;
+            --accent-red: #DC2626; --accent-blue: #9333ea; --accent-cyan: #a855f7;
+        }
+        html, body { font-family: 'Montserrat', sans-serif; color: var(--text); background: var(--bg); margin: 0; padding: 0; min-height: 100vh; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .app-container { max-width: 1550px; margin: 0 auto; padding: 1.25rem; }
+        
+        .topbar { display: flex; justify-content: space-between; align-items: center; background: var(--surface); border: 1px solid var(--border); padding: 14px 20px; border-radius: 6px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .wordmark { font-weight: 800; font-size: 2.5rem; color: #fff; display: flex; align-items: center; gap: 10px; }
+        .wordmark span { color: var(--accent-cyan); }
+        .agency-badge { background: var(--surface-card); border: 1px solid var(--border); color: var(--muted); padding: 5px 12px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+
+        .main-grid { display: grid; grid-template-columns: 380px 1fr; gap: 20px; }
+        @media(max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 18px; margin-bottom: 16px; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.2); }
+        .card h4 { margin: 0 0 14px 0; font-size: 0.85rem; color: #D1D5DB; font-weight: 700; border-bottom: 1px solid var(--border); padding-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between; }
+        label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 4px; margin-top: 10px; font-weight: 600; text-transform: uppercase; }
+        input[type="number"], input[type="text"], select { width: 100%; background: #030712; border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 8px 10px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; box-sizing: border-box; }
+        input[type="number"]:focus, input[type="text"]:focus, select:focus { outline: none; border-color: var(--accent-blue); }
+        input[type="range"] { width: 100%; padding: 0; accent-color: var(--accent-blue); cursor: pointer; }
+        button.action-btn { background: var(--surface-card); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 0.8rem; text-transform: uppercase; width: 100%; }
+        button.action-btn:hover { background: #374151; }
+        button.action-btn.active-target { background: #dc2626 !important; color: white !important; border-color: #f87171 !important; animation: pulse 1.5s infinite; }
+
+        .prop-engine { background: #0B0F19; border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-bottom: 16px; }
+        .prop-header { color: #fff; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+        .prop-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .prop-tab { flex: 1; background: #111827; border: 1px solid #1F2937; color: #6B7280; padding: 10px; text-align: center; font-size: 0.75rem; font-weight: 700; cursor: pointer; border-radius: 4px; }
+        .prop-tab.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(168, 85, 247, 0.05); }
+        .prop-time { text-align: center; font-size: 2.5rem; font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--accent-cyan); margin-bottom: 20px; }
+        .prop-scrubber { width: 100%; margin-bottom: 20px; accent-color: var(--accent-cyan); }
+        .prop-controls { display: flex; justify-content: center; gap: 10px; }
+        .prop-btn { background: #111827; border: 1px solid #1F2937; color: #9CA3AF; width: 40px; height: 40px; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+
+        #map { height: 580px !important; width: 100% !important; border-radius: 6px; border: 1px solid var(--border); cursor: crosshair; }
+        .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px; }
+        .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+        .stat-card.emph { background: #451A03; border-color: #78350F; }
+        .stat-value { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 1.15rem; color: #fff; }
+        .stat-label { font-size: 0.68rem; color: var(--muted); margin-top: 2px; font-weight: 600; text-transform: uppercase; }
+        .stat-sub { font-size: 0.65rem; color: #D1D5DB; font-weight: 700; text-transform: uppercase; display: flex; align-items: center; }
+        .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+        .drone-sticker { filter: drop-shadow(0px 4px 8px rgba(0, 0, 0, 0.9)); }
+        
+        .toggle-btn { padding: 4px 10px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; cursor: pointer; border: 1px solid var(--border); }
+        .toggle-btn.active { background: #7e22ce; color: white; border-color: #c084fc; }
+        .toggle-btn.inactive { background: #1f2937; color: #9ca3af; }
+
+        /* UAV Modal styling */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(3, 7, 18, 0.85); backdrop-filter: blur(8px); z-index: 9999; justify-content: center; align-items: center; padding: 20px; }
+        .modal-container { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 100%; max-width: 1350px; height: 90vh; display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); overflow: hidden; }
+        .modal-header { padding: 14px 20px; background: #0b1120; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .modal-title { font-size: 0.9rem; font-weight: 700; color: #c084fc; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
+        .close-modal-btn { background: #7f1d1d; border: none; color: #fff; padding: 6px 12px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; cursor: pointer; text-transform: uppercase; }
+        .close-modal-btn:hover { background: #991b1b; }
+        .modal-body-content { flex-grow: 1; display: flex; height: calc(90vh - 55px); background: #090d16; position: relative; }
+
+        .uav-sidebar { width: 380px; background: #111827; border-right: 1px solid #1f2937; display: flex; flex-direction: column; z-index: 10; }
+        .uav-sidebar-content { padding: 16px; overflow-y: auto; flex-grow: 1; display: flex; flex-direction: column; gap: 12px; }
+        .uav-card { background: rgba(17, 24, 39, 0.7); border: 1px solid #1f2937; padding: 12px; border-radius: 6px; }
+        .uav-card h3 { font-size: 10px; text-transform: uppercase; margin: 0 0 8px; color: #cbd5e1; border-bottom: 1px solid #1f2937; padding-bottom: 4px; letter-spacing: 0.5px; }
+        
+        .uav-btn { background: #7e22ce; color: white; border: none; padding: 8px; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer; text-transform: uppercase; width: 100%; transition: background 0.2s; }
+        .uav-btn:hover { background: #6b21a8; }
+        .uav-btn.rtl { background: #dc2626; }
+        .uav-btn.rtl:hover { background: #b91c1c; }
+        .uav-btn.success { background: #16a34a; }
+        .uav-btn.success:hover { background: #15803d; }
+        .uav-btn.warning { background: #ca8a04; }
+        .uav-btn.warning:hover { background: #a16207; }
+        #uav-map { flex-grow: 1; height: 100%; width: 100%; z-index: 1; cursor: crosshair; }
+        
+        .wp-icon { border: 2px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; background: #7e22ce; color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .wp-icon.active { background: #16a34a; transform: scale(1.1); }
+        
+        /* Dynamic Warnings Box */
+        .warning-box { background: rgba(220, 38, 38, 0.1); border: 1px solid #DC2626; border-radius: 4px; padding: 12px; margin-top: 16px; display: none; }
+        .warning-box h4 { margin: 0 0 8px 0; color: #F87171; font-size: 0.85rem; text-transform: uppercase; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+        .warning-list { margin: 0; padding-left: 20px; font-size: 0.8rem; color: #fecaca; line-height: 1.5; }
+
+        /* Map Legend Overlay Box */
+        .map-legend-overlay {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 500;
+            background: rgba(11, 15, 25, 0.88);
+            border: 1px solid #374151;
+            border-radius: 6px;
+            padding: 10px 14px;
+            backdrop-filter: blur(8px);
+            font-size: 0.7rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+        }
+        .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-weight: 600; color: #e2e8f0; }
+        .legend-box { width: 12px; height: 12px; border-radius: 2px; }
+
+        /* Wind Compass Widget Overlay */
+        .wind-compass-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 500;
+            background: rgba(11, 15, 25, 0.90);
+            border: 1px solid #374151;
+            border-radius: 8px;
+            padding: 10px 14px;
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+        }
+        .compass-circle {
+            width: 38px;
+            height: 38px;
+            border: 2px solid #c084fc;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: #030712;
+        }
+        .compass-arrow {
+            width: 0; 
+            height: 0; 
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 16px solid #ef4444;
+            transform-origin: 50% 80%;
+            transition: transform 0.2s ease-out;
+        }
+
+        /* Hover Inspection Info Banner */
+        .hazard-hover-inspect {
+            position: absolute;
+            top: 20px;
+            right: 70px;
+            z-index: 500;
+            background: rgba(11, 15, 25, 0.92);
+            border: 1px solid #ef4444;
+            border-radius: 6px;
+            padding: 10px 14px;
+            backdrop-filter: blur(8px);
+            max-width: 360px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="topbar">
+        <div class="wordmark"><i class="fa-solid fa-shield-halved text-purple-500"></i> DETONIX</div>
+        <div class="flex items-center gap-4">
+            <button class="action-btn" onclick="openDroneModal()" style="background: #7e22ce; color: #fff; border-color: #c084fc; width: auto;">
+                <i class="fa-solid fa-drone mr-1"></i> drone simulations and drone setting
+            </button>
+            <div class="agency-badge">OPEN-METEO FUSION &amp; DRONE PREDICTION</div>
+        </div>
+    </div>
+
+    <div class="main-grid">
+        <div>
+            <!-- PROPAGATION ENGINE -->
+            <div class="prop-engine">
+                <div class="prop-header"><i class="fa-solid fa-microchip"></i> HAZARD PROPAGATION ENGINE</div>
+                <div class="prop-tabs">
+                    <div class="prop-tab active" id="tab-pool" onclick="setHazardMode('POOL_BURN')">POOL BURN</div>
+                    <div class="prop-tab" id="tab-bleve" onclick="setHazardMode('BLEVE_BLAST')">BLEVE BLAST</div>
+                </div>
+                
+                <div class="prop-time" id="engine-time">T+ 0:00 M</div>
+                <input type="range" id="engine-scrubber" class="prop-scrubber" min="0" max="600" step="1" value="0" oninput="scrubTime(this.value)">
+                
+                <div class="prop-controls">
+                    <button class="prop-btn" onclick="stepTime(-10)"><i class="fa-solid fa-backward-step"></i></button>
+                    <button class="prop-btn" id="btn-engine-play" onclick="togglePlay()"><i class="fa-solid fa-pause"></i></button>
+                    <button class="prop-btn" onclick="resetSim()"><i class="fa-solid fa-rotate-left"></i></button>
+                    <button class="prop-btn" onclick="stepTime(10)"><i class="fa-solid fa-forward-step"></i></button>
+                </div>
+            </div>
+
+            <!-- CARD 1 -->
+            <div class="card">
+                <h4><span>1. Incident Material &amp; Origin</span> <i class="fa-solid fa-industry text-gray-400"></i></h4>
+                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                    <input type="text" id="input-address" placeholder="e.g. Chennai, India">
+                    <button class="action-btn" onclick="searchAddress()" style="width: auto; background: #16a34a; color: white;"><i class="fa-solid fa-search"></i></button>
+                </div>
+                
+                <!-- PRECISE MAP PIN TOOL BUTTON -->
+                <button id="btn-target-mode" class="action-btn" onclick="toggleSetOriginMode()" style="background: #1e293b; border-color: #c084fc; color: #c084fc; margin-bottom: 8px;">
+                    <i class="fa-solid fa-crosshairs mr-1"></i> <span>🎯 Click to Pin Fire Origin On Map</span>
+                </button>
+
+                <label>Fuel Type Selection</label>
+                <select id="fuel_type" onchange="updateFacility()">
+                    <option value="petrol">Petrol (Gasoline)</option>
+                    <option value="diesel">Diesel</option>
+                    <option value="kerosene">Kerosene</option>
+                    <option value="ethanol">Ethanol</option>
+                    <option value="lpg">LPG (Propane)</option>
+                    <option value="methane">Methane</option>
+                    <option value="hydrogen">Hydrogen</option>
+                    <option value="wood">Wood/Timber</option>
+                    <option value="plastic">Plastic/Polymer</option>
+                    <option value="rubber">Rubber</option>
+                </select>
+
+                <!-- Dynamic Properties Info Box -->
+                <div style="background: #030712; border: 1px solid var(--border); border-radius: 4px; padding: 10px; margin-top: 10px; font-size: 0.7rem; color: #9ca3af;">
+                    <div style="font-weight: 700; color: #c084fc; margin-bottom: 4px; display:flex; justify-content: space-between;">
+                        <span>MATERIAL PROPERTIES</span> <span id="prop-lel" class="text-white mono bg-purple-950 px-1 rounded text-[10px]">LEL: --</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;"><span>Flash Point:</span> <span id="prop-fp" class="text-white mono">--</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>Heat of Comb. (Hc):</span> <span id="prop-hc" class="text-white mono">-- MJ/kg</span></div>
+                    <div style="display: flex; justify-content: space-between; border-top: 1px solid #1f2937; margin-top: 4px; padding-top: 4px;">
+                        <span>Toxicity Index:</span> <span id="prop-tox" class="text-white mono font-bold">--</span>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; border-top: 1px solid #1f2937; margin-top: 4px; padding-top: 4px;">
+                        <span class="text-red-400 font-bold">Active Comb. Eff:</span> <span id="eff-comb-val" class="text-red-400 mono font-bold">--</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span class="text-amber-400 font-bold">Dynamic Burn Area:</span> <span id="eff-area-val" class="text-amber-400 mono font-bold">-- m²</span>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                    <div><label>Lat Coordinates</label><input type="number" id="lat" value="12.8406" step="0.0001" oninput="updateFacility()"></div>
+                    <div><label>Lon Coordinates</label><input type="number" id="lon" value="80.1534" step="0.0001" oninput="updateFacility()"></div>
+                </div>
+
+                <label>Room/Area Volume (m³): <span id="vol-val" class="mono text-purple-400 font-semibold">500</span></label>
+                <input type="range" id="volume" min="20" max="10000" step="10" value="500" oninput="updateFacility()">
+                
+                <label>Combustible Fraction: <span id="frac-val" class="mono text-purple-400 font-semibold">0.5</span></label>
+                <input type="range" id="fuel_fraction" min="0.05" max="1.0" step="0.05" value="0.5" oninput="updateFacility()">
+                
+                <label>Confinement (0=Open, 1=Closed): <span id="conf-val" class="mono text-purple-400 font-semibold">0.0</span></label>
+                <input type="range" id="confinement" min="0.0" max="1.0" step="0.1" value="0.0" oninput="updateFacility()">
+            </div>
+            
+            <!-- CARD 2 -->
+            <div class="card">
+                <h4>
+                    <span>2. Weather Data Source</span>
+                    <div style="display: flex; gap: 6px;">
+                        <button id="btn-mode-api" class="toggle-btn inactive" onclick="setWeatherMode(true)">API AUTO</button>
+                        <button id="btn-mode-manual" class="toggle-btn active" onclick="setWeatherMode(false)">MANUAL</button>
+                    </div>
+                </h4>
+                
+                <div id="api-status-banner" style="display: none;" class="text-xs bg-purple-950 border border-purple-800 text-purple-300 p-2 rounded mb-2">
+                    <i class="fa-solid fa-cloud-sun mr-1"></i> <strong>Open-Meteo Live API Active</strong>: Syncing local macro weather.
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div><label class="!mt-0">Ambient (°C)</label><input type="number" id="ambient_temp" value="30" oninput="updateFacility()"></div>
+                    <div><label class="!mt-0">Humidity (%)</label><input type="number" id="humidity" value="50" oninput="updateFacility()"></div>
+                </div>
+
+                <label>Wind Speed (m/s): <span id="ws-val" class="mono text-purple-400 font-semibold">2.5</span></label>
+                <input type="range" id="wind_speed" min="0.0" max="25.0" step="0.5" value="2.5" oninput="updateFacility()">
+                
+                <label>Wind Direction (° from N): <span id="wd-val" class="mono text-purple-400 font-semibold">90</span></label>
+                <input type="range" id="wind_dir" min="0" max="360" step="5" value="90" oninput="updateFacility()">
+                
+                <label>Terrain Slope (°): <span id="slope-val" class="mono text-purple-400 font-semibold">0.0</span></label>
+                <input type="range" id="terrain_slope" min="0.0" max="45.0" step="1.0" value="0.0" oninput="updateFacility()">
+            </div>
+        </div>
+
+        <div>
+            <!-- MAIN EOC MAP CONTAINER WITH OVERLAYS -->
+            <div style="position: relative;">
+                <div id="map"></div>
+
+                <!-- LIVE WIND COMPASS OVERLAY TAB -->
+                <div class="wind-compass-overlay">
+                    <div class="compass-circle">
+                        <div id="compass-needle" class="compass-arrow"></div>
+                    </div>
+                    <div>
+                        <div class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Live Anemometer Vector</div>
+                        <div id="wind-compass-readout" class="mono text-purple-300 font-bold text-sm">0.0 m/s @ 0° N</div>
+                    </div>
+                </div>
+
+                <!-- HOVER INSPECTION TOOLTIP OVERLAY -->
+                <div id="hazard-inspect-overlay" class="hazard-hover-inspect">
+                    <div class="flex justify-between items-center border-b border-gray-700 pb-1 mb-1">
+                        <span id="inspect-zone-title" class="text-xs font-bold uppercase tracking-wider text-red-400">ZONE TITLE</span>
+                        <span id="inspect-zone-danger" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-red-950 text-red-300 font-bold">DANGER</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-xs font-mono my-2 bg-slate-950 p-2 rounded">
+                        <div><span class="text-[9px] text-gray-400 block">TEMP IN ZONE</span><strong id="inspect-zone-temp" class="text-white text-sm">0.0 °C</strong></div>
+                        <div><span class="text-[9px] text-gray-400 block">RAD FLUX</span><strong id="inspect-zone-flux" class="text-amber-400 text-sm">0.0 kW/m²</strong></div>
+                    </div>
+                    <div id="inspect-zone-desc" class="text-[10px] text-slate-300 leading-snug">Hovering over safety perimeter boundary...</div>
+                </div>
+
+                <!-- MAP LEGEND BOX OVERLAY -->
+                <div class="map-legend-overlay">
+                    <div class="text-[10px] text-gray-400 font-bold uppercase mb-2 border-b border-gray-700 pb-1">
+                        <i class="fa-solid fa-layer-group text-purple-400 mr-1"></i> Hazard Boundary Legends
+                    </div>
+                    <div class="legend-item"><div class="legend-box" style="background:#c0392b;"></div><span>Red: Lethal Core (&gt;37.5 kW/m² | &gt;1000°C)</span></div>
+                    <div class="legend-item"><div class="legend-box" style="background:#f39c12;"></div><span>Yellow: Ignition Zone (&gt;12.5 kW/m² | Severe Burn)</span></div>
+                    <div class="legend-item"><div class="legend-box" style="background:#27ae60;"></div><span>Green: Safe Staging &amp; Smoke Limit</span></div>
+                    <div class="legend-item"><div class="legend-box" style="background:#8b5cf6;"></div><span>Purple: Forecast Shift [+5M Wind Drift]</span></div>
+                </div>
+            </div>
+
+            <div class="stat-grid" id="stat-grid"></div>
+
+            <!-- TELEMETRY PANEL BELOW MAP: LIVE DRONE SENSOR INPUTS -->
+            <div class="card" style="margin-top: 16px; padding: 16px; background: #0b1120;">
+                <h4 style="margin-bottom: 12px;">
+                    <span><i class="fa-solid fa-skull-crossbones text-red-500 mr-2"></i> Live Hazard &amp; UAV GPS Crosscheck Stream</span>
+                    <span id="gps-crosscheck-badge" class="text-[10px] text-emerald-400 bg-emerald-950 border border-emerald-800 px-2 py-0.5 rounded font-mono">GPS LOCKED: 0.0m BEARING 0°</span>
+                </h4>
+                
+                <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed #1f2937;">
+                    <div class="bg-slate-900 p-2 rounded border border-slate-800">
+                        <span class="text-[10px] text-purple-400 uppercase font-bold block"><i class="fa-solid fa-arrows-up-down mr-1"></i>Drone Altitude</span>
+                        <div id="out-alt" class="mono text-purple-300 font-bold text-sm">35 m</div>
+                    </div>
+                    <div class="bg-slate-900 p-2 rounded border border-slate-800">
+                        <span class="text-[10px] text-amber-400 uppercase font-bold block"><i class="fa-solid fa-temperature-high mr-1"></i>Region Temp (TC)</span>
+                        <div id="out-temp" class="mono text-amber-300 font-bold text-sm">0.0 °C</div>
+                    </div>
+                    <div class="bg-slate-900 p-2 rounded border border-slate-800">
+                        <span class="text-[10px] text-red-400 uppercase font-bold block"><i class="fa-solid fa-fire-flame-curved mr-1"></i>IR Radiant Flux</span>
+                        <div id="out-flux" class="mono text-red-300 font-bold text-sm">0.00 kW/m²</div>
+                    </div>
+                    <div class="bg-slate-900 p-2 rounded border border-slate-800">
+                        <span class="text-[10px] text-gray-400 uppercase font-bold block"><i class="fa-solid fa-smog mr-1"></i>Smoke Density</span>
+                        <div id="out-smoke" class="mono text-gray-300 font-bold text-sm">0.00 mg/m³</div>
+                    </div>
+                    <div class="bg-slate-900 p-2 rounded border border-slate-800">
+                        <span class="text-[10px] text-emerald-400 uppercase font-bold block"><i class="fa-solid fa-wind mr-1"></i>3D Anemometer</span>
+                        <div id="out-livewind" class="mono text-emerald-300 font-bold text-sm">0.0 m/s @ 0°</div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                    <div><span class="text-[10px] text-gray-500 uppercase">Mass Burn Rate</span><div id="out-burnrate" class="mono text-purple-400 font-bold text-sm">0.0 kg/s</div></div>
+                    <div><span class="text-[10px] text-gray-500 uppercase">Soot Generation</span><div id="out-soot" class="mono text-gray-300 font-bold text-sm">0.0 kg/s</div></div>
+                    <div><span class="text-[10px] text-gray-500 uppercase">CO Generation</span><div id="out-co" class="mono text-orange-400 font-bold text-sm">0.0 kg/s</div></div>
+                    <div><span class="text-[10px] text-gray-500 uppercase">Burnout Time</span><div id="out-burnout" class="mono text-purple-400 font-bold text-sm">--:--</div></div>
+                </div>
+                
+                <!-- Dynamic Warnings Box -->
+                <div id="warning-box" class="warning-box">
+                    <h4><i class="fa-solid fa-triangle-exclamation"></i> TACTICAL WARNINGS</h4>
+                    <ul id="warning-list" class="warning-list"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- UAV MODAL -->
+<div class="modal-overlay" id="drone-modal">
+    <div class="modal-container">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fa-solid fa-drone"></i> AEGIS UAV Waypoint Planning &amp; Execution</div>
+            <button class="close-modal-btn" onclick="closeDroneModal()">Close Window</button>
+        </div>
+        <div class="modal-body-content">
+            <div class="uav-sidebar">
+                <div style="padding: 14px; background: #0b1120; border-bottom: 1px solid #1f2937; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 12px; font-weight: 700; color: #c084fc; text-transform: uppercase;">UAV Flight Console</span>
+                    <span id="modal-mode-badge" style="background: #22c55e; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 8px; font-weight: 700;">ACTIVE</span>
+                </div>
+                <div class="uav-sidebar-content">
+                    <div class="uav-card">
+                        <h3>Flight Configuration</h3>
+                        <label style="font-size:10px; margin-top:4px;">Flight Altitude (m):</label>
+                        <input type="number" id="uav-input-alt" value="35" min="5" max="150" onchange="updateUavConfig()" style="font-size:11px; padding:5px; margin-bottom: 6px;">
+                        <label style="font-size:10px; margin-top:6px;">Orbit Radius (m):</label>
+                        <input type="number" id="uav-input-orbit" value="120" min="20" max="300" onchange="updateUavConfig()" style="font-size:11px; padding:5px;">
+                    </div>
+                    
+                    <!-- NEW DEDICATED WAYPOINT PANEL -->
+                    <div class="uav-card" style="border-color: #7e22ce;">
+                        <h3 style="color: #c084fc;"><i class="fa-solid fa-route"></i> Waypoint Command Center</h3>
+                        <div style="font-size:9px; color:#94a3b8; margin-bottom:8px; line-height:1.3;">
+                            Click anywhere on the map to plot custom UAV flight nodes.
+                        </div>
+                        
+                        <div id="wp-queue-list" style="background: #030712; padding: 8px; border-radius: 4px; max-height: 120px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 10px; border: 1px solid #1f2937; margin-bottom: 10px;">
+                            <!-- Populated dynamically via JS -->
+                        </div>
+                        
+                        <div style="display:flex; gap:6px;">
+                            <button class="uav-btn success" onclick="sendUavCommand('START_MISSION')">▶ Execute Path</button>
+                            <button class="uav-btn warning" onclick="sendUavCommand('CLEAR_WAYPOINTS')">Clear Queue</button>
+                        </div>
+                    </div>
+
+                    <div class="uav-card">
+                        <h3>Standard Operations</h3>
+                        <div style="display:flex; gap:6px;">
+                            <button class="uav-btn" onclick="sendUavCommand('ORBIT')">Auto Orbit</button>
+                            <button class="uav-btn rtl" onclick="sendUavCommand('RTL')">RTL Base</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- MODAL DRONE MAP -->
+            <div id="uav-map"></div>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+    // ---------------------------------------------------------
+    // 1. MAP INITIALIZATION
+    // ---------------------------------------------------------
+    let map = L.map('map', { zoomControl: false, zoomSnap: 0.5 }).setView([12.8406, 80.1534], 17.5); 
+    L.control.zoom({ position: 'topright' }).addTo(map);
+    L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains: ['mt0','mt1','mt2','mt3'] }).addTo(map);
+    let hazardLayer = L.layerGroup().addTo(map);
+    
+    let uavMap = null;
+    let uavHazardLayer = null;
+    let initialPanDone = false;
+    let isPlaying = true;
+    let useApiWeather = false;
+    let isSetOriginMode = false; // Toggle for clicking map to set fire location
+
+    let droneIcon = L.divIcon({ className: 'drone-sticker', html: `<svg width="32" height="32" viewBox="0 0 40 40"><line x1="8" y1="8" x2="32" y2="32" stroke="#cbd5e1" stroke-width="3"/><line x1="32" y1="8" x2="8" y2="32" stroke="#cbd5e1" stroke-width="3"/><circle cx="20" cy="20" r="4" fill="#ef4444" stroke="#fff" stroke-width="2"/></svg>`, iconSize: [32, 32], iconAnchor: [16, 16] });
+
+    let fireOriginIcon = L.divIcon({ className: 'fire-sticker', html: `<div style="background:#111827; border:2px solid #ef4444; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:#ef4444; box-shadow:0 0 10px rgba(239,68,68,0.8);"><i class="fa-solid fa-fire text-xs"></i></div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
+
+    // ---------------------------------------------------------
+    // 2. INTERACTIVE MAP CLICK & ORIGIN PIN HANDLER
+    // ---------------------------------------------------------
+    function toggleSetOriginMode() {
+        isSetOriginMode = !isSetOriginMode;
+        let btn = document.getElementById('btn-target-mode');
+        if(isSetOriginMode) {
+            btn.className = "action-btn active-target";
+            btn.innerHTML = '<i class="fa-solid fa-crosshairs mr-1"></i> <span>🎯 Click anywhere on the map to set Fire Origin</span>';
+            map.getContainer().style.cursor = 'crosshair';
+        } else {
+            btn.className = "action-btn";
+            btn.innerHTML = '<i class="fa-solid fa-crosshairs mr-1"></i> <span>🎯 Click to Pin Fire Origin On Map</span>';
+            map.getContainer().style.cursor = '';
+        }
+    }
+
+    map.on('click', function(e) {
+        if(isSetOriginMode) {
+            document.getElementById('lat').value = e.latlng.lat.toFixed(5);
+            document.getElementById('lon').value = e.latlng.lng.toFixed(5);
+            fetch('/api/command', { 
+                method: 'POST', headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({ command: 'SET_LOCATION', lat: e.latlng.lat, lon: e.latlng.lng }) 
+            });
+            toggleSetOriginMode();
+            map.panTo([e.latlng.lat, e.latlng.lng]);
+        } else {
+            // Standard waypoint add click
+            fetch('/api/command', { 
+                method: 'POST', headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({ command: 'UAV_CMD', uav_command: 'ADD_WAYPOINT', lat: e.latlng.lat, lon: e.latlng.lng }) 
+            });
+        }
+    });
+
+    // ---------------------------------------------------------
+    // 3. UI CONTROLS & UPDATES
+    // ---------------------------------------------------------
+    function formatTime(totalSeconds) {
+        let mins = Math.floor(totalSeconds / 60);
+        let secs = Math.floor(totalSeconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    function setWeatherMode(useApi) {
+        useApiWeather = useApi;
+        document.getElementById('btn-mode-api').className = useApi ? 'toggle-btn active' : 'toggle-btn inactive';
+        document.getElementById('btn-mode-manual').className = !useApi ? 'toggle-btn active' : 'toggle-btn inactive';
+        document.getElementById('api-status-banner').style.display = useApi ? 'block' : 'none';
+        
+        document.getElementById('wind_speed').disabled = useApi;
+        document.getElementById('wind_dir').disabled = useApi;
+
+        fetch('/api/command', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ command: 'SET_WEATHER_MODE', use_api: useApi })
+        });
+    }
+
+    function updateFacility() {
+        let vol = parseFloat(document.getElementById('volume').value);
+        let frac = parseFloat(document.getElementById('fuel_fraction').value);
+        
+        document.getElementById('vol-val').innerText = vol;
+        document.getElementById('frac-val').innerText = frac.toFixed(2);
+        document.getElementById('conf-val').innerText = parseFloat(document.getElementById('confinement').value).toFixed(1);
+        document.getElementById('slope-val').innerText = parseFloat(document.getElementById('terrain_slope').value).toFixed(1);
+
+        if(!useApiWeather) {
+            document.getElementById('ws-val').innerText = parseFloat(document.getElementById('wind_speed').value).toFixed(1);
+            document.getElementById('wd-val').innerText = document.getElementById('wind_dir').value;
+        }
+
+        let fuelType = document.getElementById('fuel_type').value;
+        let densityMap = { 'petrol': 740, 'diesel': 830, 'kerosene': 810, 'ethanol': 789, 'lpg': 500, 'methane': 422, 'hydrogen': 71, 'wood': 500, 'plastic': 950, 'rubber': 1100 };
+        let density = densityMap[fuelType] || 800;
+        
+        let mass = vol * density * frac;
+        let area = Math.PI * Math.pow(Math.cbrt(vol / (Math.PI * 4)), 2);
+
+        fetch('/api/command', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                command: 'UPDATE_INCIDENT',
+                config: {
+                    lat: parseFloat(document.getElementById('lat').value),
+                    lon: parseFloat(document.getElementById('lon').value),
+                    fuel_type: fuelType,
+                    fuel_mass_kg: mass,
+                    burning_area_m2: area,
+                    ambient_temperature_C: parseFloat(document.getElementById('ambient_temp').value),
+                    wind_speed_m_s: parseFloat(document.getElementById('wind_speed').value),
+                    wind_direction_deg: parseFloat(document.getElementById('wind_dir').value),
+                    relative_humidity_pct: parseFloat(document.getElementById('humidity').value),
+                    terrain_slope_deg: parseFloat(document.getElementById('terrain_slope').value),
+                    confinement: parseFloat(document.getElementById('confinement').value)
+                }
+            })
+        });
+    }
+
+    function setHazardMode(mode) {
+        document.getElementById('tab-pool').className = mode === 'POOL_BURN' ? 'prop-tab active' : 'prop-tab';
+        document.getElementById('tab-bleve').className = mode === 'BLEVE_BLAST' ? 'prop-tab active' : 'prop-tab';
+        fetch('/api/command', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ command: 'SET_HAZARD_MODE', mode: mode }) });
+    }
+
+    function togglePlay() {
+        fetch('/api/command', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ command: 'PLAY_PAUSE' }) });
+        isPlaying = !isPlaying;
+        document.getElementById('btn-engine-play').innerHTML = isPlaying ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
+    }
+
+    function resetSim() { fetch('/api/command', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ command: 'RESET_TIME' }) }); }
+    function scrubTime(val) { fetch('/api/command', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ command: 'SCRUB_TIME', time_s: val }) }); }
+    function stepTime(val) { fetch('/api/command', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ command: 'STEP_TIME', step: val }) }); }
+    
+    function sendUavCommand(cmd) { fetch('/api/command', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ command: 'UAV_CMD', uav_command: cmd }) }); }
+    function updateUavConfig() { fetch('/api/command', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ command: 'UPDATE_DRONE', orbit_radius: parseFloat(document.getElementById('uav-input-orbit').value), altitude: parseFloat(document.getElementById('uav-input-alt').value) }) }); }
+    
+    function searchAddress() {
+        let q = document.getElementById('input-address').value;
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`).then(r => r.json()).then(data => {
+            if(data.length > 0) {
+                document.getElementById('lat').value = parseFloat(data[0].lat).toFixed(4);
+                document.getElementById('lon').value = parseFloat(data[0].lon).toFixed(4);
+                fetch('/api/command', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ command: 'SET_LOCATION', lat: data[0].lat, lon: data[0].lon }) });
+                map.flyTo([data[0].lat, data[0].lon], 17.5, {animate: true});
+            }
+        });
+    }
+
+    function openDroneModal() {
+        document.getElementById('drone-modal').style.display = 'flex';
+        let center = [parseFloat(document.getElementById('lat').value), parseFloat(document.getElementById('lon').value)];
+        if (!uavMap) {
+            uavMap = L.map('uav-map', { zoomControl: false }).setView(center, 17.5);
+            L.control.zoom({ position: 'bottomright' }).addTo(uavMap);
+            L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] }).addTo(uavMap);
+            uavHazardLayer = L.layerGroup().addTo(uavMap);
+            
+            uavMap.on('click', function(e) { 
+                fetch('/api/command', { 
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({ command: 'UAV_CMD', uav_command: 'ADD_WAYPOINT', lat: e.latlng.lat, lon: e.latlng.lng }) 
+                }); 
+            });
+        }
+        setTimeout(() => { uavMap.invalidateSize(); uavMap.setView(center, 17.5); }, 200);
+    }
+    function closeDroneModal() { document.getElementById('drone-modal').style.display = 'none'; }
+
+    // ---------------------------------------------------------
+    // 4. HIGH SPEED POLLING LOOP (THE RENDERER)
+    // ---------------------------------------------------------
+    setInterval(() => {
+        fetch('/api/state').then(res => res.json()).then(data => {
+            if(data.status === "WAITING") return;
+            
+            // DRAW MAIN EOC MAP
+            hazardLayer.clearLayers();
+            
+            // Dynamic GeoJSON rendering with mouseover hover events
+            L.geoJSON(data.zones, { 
+                style: function (f) { 
+                    if(f.properties.is_blast) return { color: f.properties.color, fillColor: "transparent", fillOpacity: 0, weight: 4 };
+                    if(f.properties.severity.includes("Forecast")) return { color: f.properties.color, fillColor: f.properties.color, fillOpacity: 0.15, weight: 2, dashArray: "5, 7" };
+                    return { color: f.properties.color, fillColor: f.properties.color, fillOpacity: 0.35, weight: 2 }; 
+                },
+                onEachFeature: function(feature, layer) {
+                    layer.on({
+                        mouseover: function(e) {
+                            let inspectBox = document.getElementById('hazard-inspect-overlay');
+                            inspectBox.style.display = 'block';
+                            document.getElementById('inspect-zone-title').innerText = feature.properties.severity;
+                            document.getElementById('inspect-zone-danger').innerText = feature.properties.danger_level;
+                            document.getElementById('inspect-zone-temp').innerText = `${feature.properties.temp_C} °C`;
+                            document.getElementById('inspect-zone-flux').innerText = `${feature.properties.flux_kW} kW/m²`;
+                            document.getElementById('inspect-zone-desc').innerText = feature.properties.tactical_desc;
+                            
+                            layer.setStyle({ weight: 3.5, fillOpacity: 0.55 });
+                        },
+                        mouseout: function(e) {
+                            document.getElementById('hazard-inspect-overlay').style.display = 'none';
+                            layer.setStyle({ weight: 2, fillOpacity: 0.35 });
+                        }
+                    });
+                }
+            }).addTo(hazardLayer);
+            
+            // Draw Origin Marker and Drone
+            L.marker([data.incident.lat, data.incident.lon], { icon: fireOriginIcon }).addTo(hazardLayer).bindTooltip("Fire Ground Origin Point"); 
+            L.marker([data.drone.lat, data.drone.lon], { icon: droneIcon, interactive: false }).addTo(hazardLayer);
+            
+            if (!initialPanDone) { map.setView([data.incident.lat, data.incident.lon], 17.5); initialPanDone = true; }
+
+            // DRAW UAV MODAL MAP & WAYPOINTS
+            if(uavHazardLayer) {
+                uavHazardLayer.clearLayers();
+                L.geoJSON(data.zones, { 
+                    interactive: false,
+                    style: function (f) { return { color: f.properties.color, fillOpacity: 0.15, weight: 1.5 }; } 
+                }).addTo(uavHazardLayer);
+                
+                L.marker([data.incident.lat, data.incident.lon], { icon: fireOriginIcon }).addTo(uavHazardLayer);
+                L.marker([data.drone.lat, data.drone.lon], { icon: droneIcon, interactive: false }).addTo(uavHazardLayer);
+
+                let pts = [[data.drone.lat, data.drone.lon]];
+                let wpListHtml = '';
+                if(data.drone.waypoint_queue.length === 0) {
+                    wpListHtml = '<div style="color: #64748b; font-style: italic;">No active waypoints. Click map to plot route...</div>';
+                }
+
+                data.drone.waypoint_queue.forEach((wp, idx) => { 
+                    pts.push([wp.lat, wp.lon]); 
+                    let isCurrent = (idx === data.drone.current_wp_index && data.drone.mode === 'WAYPOINT_SEQUENCE');
+                    
+                    let wpIcon = L.divIcon({ className: 'wp-icon ' + (isCurrent ? 'active' : ''), html: idx + 1, iconSize: [20, 20], iconAnchor: [10, 10] });
+                    L.marker([wp.lat, wp.lon], { icon: wpIcon, interactive: false }).addTo(uavHazardLayer); 
+                    
+                    let itemColor = isCurrent ? '#c084fc' : '#94a3b8';
+                    let itemWeight = isCurrent ? 'bold' : 'normal';
+                    let statusIcon = isCurrent ? '<i class="fa-solid fa-plane text-green-400 float-right"></i>' : '';
+                    wpListHtml += `<div style="color: ${itemColor}; font-weight: ${itemWeight}; padding: 4px 0; border-bottom: 1px solid #1f2937;">[Node ${idx + 1}] &nbsp; ${wp.lat.toFixed(4)}, ${wp.lon.toFixed(4)} ${statusIcon}</div>`;
+                });
+                
+                if(pts.length > 1) L.polyline(pts, {color: '#c084fc', weight: 3, dashArray: '5,5', interactive: false}).addTo(uavHazardLayer);
+                document.getElementById('wp-queue-list').innerHTML = wpListHtml;
+            }
+
+            // Sync Timeline
+            let simT = data.incident.sim_time_s;
+            let burnT = data.incident.burnout_time_s;
+            document.getElementById('engine-time').innerText = `T+ ${formatTime(simT)} M`;
+            
+            let scrubber = document.getElementById('engine-scrubber');
+            scrubber.max = burnT > 0 ? burnT : 600;
+            if (document.activeElement !== scrubber) scrubber.value = simT;
+
+            if (useApiWeather && data.weather_api) {
+                document.getElementById('ws-val').innerText = data.weather_api.wind_speed_10m.toFixed(1);
+                document.getElementById('wd-val').innerText = data.weather_api.wind_direction_10m.toFixed(0);
+                document.getElementById('wind_speed').value = data.weather_api.wind_speed_10m;
+                document.getElementById('wind_dir').value = data.weather_api.wind_direction_10m;
+            }
+
+            // UPDATE LIVE WIND COMPASS TAB
+            let wAngle = data.live_wind.angle;
+            let wSpd = data.live_wind.speed;
+            document.getElementById('compass-needle').style.transform = `rotate(${wAngle}deg)`;
+            document.getElementById('wind-compass-readout').innerText = `${wSpd.toFixed(1)} m/s @ ${wAngle.toFixed(0)}°`;
+
+            // UPDATE GPS CROSSCHECK BADGE
+            let gpsChk = data.gps_crosscheck;
+            document.getElementById('gps-crosscheck-badge').innerText = `GPS ${gpsChk.status}: RANGE ${gpsChk.range_m}m · BEARING ${gpsChk.bearing_deg}°`;
+
+            // Material Properties Updates
+            document.getElementById('prop-fp').innerText = data.fuel_properties.flash_point_C !== null ? `${data.fuel_properties.flash_point_C} °C` : "N/A";
+            document.getElementById('prop-lel').innerText = data.fuel_properties.lel_vol_pct !== null ? `LEL: ${data.fuel_properties.lel_vol_pct}%` : "LEL: N/A";
+            document.getElementById('prop-hc').innerText = `${data.fuel_properties.heat_of_combustion_MJ_kg} MJ/kg`;
+            
+            let toxColor = data.fuel_properties.toxic_index >= 1.5 ? '#ef4444' : (data.fuel_properties.toxic_index >= 1.0 ? '#f59e0b' : '#22c55e');
+            document.getElementById('prop-tox').innerText = data.fuel_properties.toxic_index;
+            document.getElementById('prop-tox').style.color = toxColor;
+            
+            document.getElementById('eff-comb-val').innerText = `${(data.fire_dynamics.effective_combustion_efficiency * 100).toFixed(1)}%`;
+            document.getElementById('eff-area-val').innerText = `${data.fire_dynamics.effective_burning_area_m2.toFixed(1)} m²`;
+
+            // UPDATE LIVE DRONE SENSOR TELEMETRY PANEL
+            document.getElementById('out-alt').innerText = `${data.drone.altitude.toFixed(0)} m`;
+            document.getElementById('out-temp').innerText = `${data.drone.thermocouple_temp.toFixed(1)} °C`;
+            document.getElementById('out-flux').innerText = `${data.drone.ir_radiant_flux.toFixed(2)} kW/m²`;
+            document.getElementById('out-smoke').innerText = `${data.drone.smoke_density.toFixed(2)} mg/m³`;
+            document.getElementById('out-livewind').innerText = `${data.live_wind.speed} m/s @ ${data.live_wind.angle}°`;
+            
+            document.getElementById('out-burnrate').innerText = `${data.live_outputs.burn_rate.toFixed(2)} kg/s`;
+            document.getElementById('out-soot').innerText = `${data.live_outputs.soot.toFixed(3)} kg/s`;
+            document.getElementById('out-co').innerText = `${data.live_outputs.co.toFixed(3)} kg/s`;
+            document.getElementById('out-burnout').innerText = `${formatTime(burnT)}`;
+
+            let warningBox = document.getElementById('warning-box');
+            let warningList = document.getElementById('warning-list');
+            if(data.fire_dynamics.tactical_warnings && data.fire_dynamics.tactical_warnings.length > 0) {
+                warningBox.style.display = 'block';
+                warningList.innerHTML = data.fire_dynamics.tactical_warnings.map(w => `<li>${w}</li>`).join('');
+            } else {
+                warningBox.style.display = 'none';
+            }
+
+            let cardsHtml = '';
+            let features = data.zones.features;
+            
+            if(data.incident.hazard_mode === 'BLEVE_BLAST') {
+                 cardsHtml += `<div class="stat-card emph"><span class="swatch" style="background:#a855f7"></span><span class="stat-sub" style="color:#a855f7">Blast Limit</span><div class="stat-value">${data.fire_dynamics.max_blast_radius_m.toFixed(1)} m</div><div class="stat-label">Overpressure</div></div>`;
+                 cardsHtml += `<div class="stat-card"><span class="swatch" style="background:#c084fc"></span><span class="stat-sub" style="color:#c084fc">Sim Time</span><div class="stat-value">${formatTime(simT)}</div><div class="stat-label">Elapsed</div></div>`;
+            } else if (features.length >= 4) {
+                 cardsHtml += `<div class="stat-card emph"><span class="swatch" style="background:#c0392b"></span><span class="stat-sub" style="color:#c0392b">Lethal Core</span><div class="stat-value">${features[2].properties.radius.toFixed(1)} m</div><div class="stat-label">37.5 kW/m²</div></div>`;
+                 cardsHtml += `<div class="stat-card"><span class="swatch" style="background:#f39c12"></span><span class="stat-sub" style="color:#f39c12">Ignition Zone</span><div class="stat-value">${features[1].properties.radius.toFixed(1)} m</div><div class="stat-label">12.5 kW/m²</div></div>`;
+                 cardsHtml += `<div class="stat-card"><span class="swatch" style="background:#8b5cf6"></span><span class="stat-sub" style="color:#8b5cf6">Forecast +5M</span><div class="stat-value">${data.predicted_5min_wind.direction}°</div><div class="stat-label">Predicted Shift</div></div>`;
+                 cardsHtml += `<div class="stat-card"><span class="swatch" style="background:#27ae60"></span><span class="stat-sub" style="color:#27ae60">Safe Boundary</span><div class="stat-value">${features[0].properties.radius.toFixed(1)} m</div><div class="stat-label">Safety Limit</div></div>`;
+            } else {
+                 cardsHtml += `<div class="stat-card"><span class="swatch" style="background:#4b5563"></span><span class="stat-sub" style="color:#9ca3af">System Standby</span><div class="stat-value">0.0 m</div><div class="stat-label">Fuel Exhausted</div></div>`;
+            }
+
+            document.getElementById('stat-grid').innerHTML = cardsHtml;
+        }).catch(() => {});
+    }, 150);
+
+    setWeatherMode(false);
+    updateFacility();
+</script>
+</body>
+</html>
